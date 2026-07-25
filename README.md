@@ -2,8 +2,8 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
-Copy the environment template and add the publishable and secret keys from your
-Clerk Dashboard:
+Copy the environment template and add the Clerk and Supabase values described
+below:
 
 ```bash
 cp .env.example .env.local
@@ -11,6 +11,37 @@ cp .env.example .env.local
 
 Keep the configured `/sign-in` and `/sign-up` URLs in place. Never commit
 `.env.local`; the Clerk secret key is server-only.
+
+## Supabase setup
+
+Supabase is the source of truth for sources, articles, analyses, pipeline logs,
+and Oxylabs scheduling state. The current UI still renders demo data; connecting
+the pages to these queries is a separate implementation task.
+
+1. Create or select a Supabase project.
+2. Open **Dashboard → SQL Editor**, paste the contents of
+   [`supabase/schema.sql`](supabase/schema.sql), and run it.
+3. Run the script a second time to confirm the setup is idempotent.
+4. In **Table Editor**, verify that `sources`, `articles`,
+   `article_analyses`, `logs`, `oxylabs_schedules`, and
+   `oxylabs_schedule_runs` exist and have Row Level Security enabled.
+5. Copy the project URL, publishable/anon key, and service-role/secret key into
+   `.env.local`:
+
+   ```bash
+   NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_publishable_or_anon_key
+   SUPABASE_SERVICE_ROLE_KEY=your_service_role_or_secret_key
+   ```
+
+`SUPABASE_SERVICE_ROLE_KEY` is server-only and must never be exposed to browser
+code. Clerk remains the authentication provider; this project does not use
+Supabase Auth.
+
+Newer Supabase projects can default to not exposing SQL-created tables through
+the Data API. The schema explicitly grants the `service_role` access required
+by the server-side `supabase-js` client and revokes table access from `anon` and
+`authenticated`. No browser data policies are created in this phase.
 
 Then run the development server:
 
