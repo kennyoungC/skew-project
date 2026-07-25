@@ -43,6 +43,39 @@ the Data API. The schema explicitly grants the `service_role` access required
 by the server-side `supabase-js` client and revokes table access from `anon` and
 `authenticated`. No browser data policies are created in this phase.
 
+## Manual scraping
+
+The manual scrape pipeline reads active homepage entry pages from Supabase,
+retrieves homepage and article HTML through the Oxylabs Web Scraper Realtime
+API, validates article content, and appends valid articles to Supabase.
+
+Add these server-only values to `.env.local`:
+
+```bash
+OXY_WSA_USERNAME=your_oxylabs_username
+OXY_WSA_PASSWORD=your_oxylabs_password
+BIASLY_ADMIN_SECRET=a_long_random_secret
+```
+
+Never prefix these values with `NEXT_PUBLIC_`. Trigger scraping only from a
+trusted terminal or server:
+
+```bash
+curl -sS -X POST http://localhost:3000/api/scrape \
+  -H 'Content-Type: application/json' \
+  -H "x-biasly-admin-secret: $BIASLY_ADMIN_SECRET" \
+  --data '{
+    "sourceNames":["BBC News","Fox News","NPR","Reuters","The Guardian"],
+    "limitPerSource":5
+  }'
+```
+
+The source selectors are optional. Omitting them uses all active Supabase
+sources. `limitPerSource` defaults to 5 and is capped at 5. Watch the terminal
+running `npm run dev` for safe per-source progress logs. Scraped articles remain
+hidden from the current demo UI until AI analysis and live UI data wiring are
+implemented.
+
 Then run the development server:
 
 ```bash
