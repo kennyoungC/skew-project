@@ -2,7 +2,17 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
-First, run the development server:
+Copy the environment template and add the publishable and secret keys from your
+Clerk Dashboard:
+
+```bash
+cp .env.example .env.local
+```
+
+Keep the configured `/sign-in` and `/sign-up` URLs in place. Never commit
+`.env.local`; the Clerk secret key is server-only.
+
+Then run the development server:
 
 ```bash
 npm run dev
@@ -15,6 +25,9 @@ bun dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+The home feed is public. News detail routes under `/news` require a signed-in
+Clerk user and return users to the requested article after authentication.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 

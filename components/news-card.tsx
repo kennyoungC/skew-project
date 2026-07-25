@@ -28,10 +28,10 @@ export function NewsCard({ article, featured = false }: { article: DemoArticle; 
           priority={featured}
         />
       </a>
-      <div className={`flex flex-col p-5 sm:p-[22px] ${featured ? "justify-center lg:p-[clamp(28px,4vw,52px)]" : ""}`}>
+      <div className={`flex flex-col p-5 sm:p-5.5 ${featured ? "justify-center lg:p-[clamp(28px,4vw,52px)]" : ""}`}>
         <div className="flex items-center gap-2 text-[11px] font-medium text-secondary">
           <span className="font-semibold text-foreground">{article.source}</span>
-          <span className="size-[3px] rounded-full bg-zinc-400" />
+          <span className="size-0.75 rounded-full bg-zinc-400" />
           <span>{article.category}</span>
         </div>
         <h3
@@ -53,7 +53,7 @@ export function NewsCard({ article, featured = false }: { article: DemoArticle; 
         </div>
         <div className="mt-5 flex items-center gap-4 border-t border-divider pt-4 text-[11px] text-zinc-600">
           <span className="inline-flex items-center gap-1.5">
-            <ClockIcon className="size-[15px]" />
+            <ClockIcon className="size-3.75" />
             {article.published}
           </span>
           <span>{article.readTime} read</span>
@@ -62,7 +62,7 @@ export function NewsCard({ article, featured = false }: { article: DemoArticle; 
             type="button"
             aria-label={`Bookmark ${article.title}`}
           >
-            <BookmarkIcon className="size-[15px]" />
+            <BookmarkIcon className="size-3.75" />
           </button>
         </div>
       </div>

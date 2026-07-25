@@ -30,7 +30,7 @@ export function BiasMeter({
           ] as const
         ).map(([label, value, colors]) => (
           <span
-            className={`grid min-w-0 place-items-center px-[3px] text-[9px] font-semibold whitespace-nowrap ${colors}`}
+            className={`grid min-w-0 place-items-center px-0.75 text-[9px] font-semibold whitespace-nowrap ${colors}`}
             key={label}
             style={{ width: `${value}%` }}
           >

@@ -43,7 +43,7 @@ const typeRows = [
 export default function DesignSystemPage() {
   return (
     <main className="min-h-screen bg-background px-4 py-4 text-foreground sm:px-6 sm:py-6">
-      <div className="mx-auto max-w-[1440px]">
+      <div className="mx-auto max-w-360">
         <header className="mb-3 flex items-center justify-between rounded-lg border border-border bg-surface px-5 py-4 shadow-soft-sm">
           <Brand />
           <div className="flex items-center gap-4">
@@ -63,7 +63,7 @@ export default function DesignSystemPage() {
         <div className="grid gap-3 lg:grid-cols-12">
           <section className={`${panel} lg:col-span-4`}>
             <h1 className={panelTitle}>Brand</h1>
-            <div className="flex min-h-[220px] flex-col items-center justify-center text-center">
+            <div className="flex min-h-55 flex-col items-center justify-center text-center">
               <div className="scale-150">
                 <Brand />
               </div>
@@ -91,7 +91,7 @@ export default function DesignSystemPage() {
                 </p>
               </div>
               <div className="overflow-x-auto">
-                <div className="min-w-[600px]">
+                <div className="min-w-150">
                   <div className="grid grid-cols-[110px_1fr_55px_55px_65px] gap-3 border-b border-divider pb-2 text-[9px] font-semibold uppercase">
                     <span>Style</span><span>Usage</span><span>Size</span><span>Weight</span><span>Line height</span>
                   </div>
@@ -223,7 +223,7 @@ export default function DesignSystemPage() {
           <section className={`${panel} lg:col-span-5`}>
             <h2 className={panelTitle}>Grid system</h2>
             <div className="overflow-x-auto">
-              <div className="grid min-w-[440px] grid-cols-12 gap-2 border-x border-border p-3">
+              <div className="grid min-w-110 grid-cols-12 gap-2 border-x border-border p-3">
                 {Array.from({ length: 12 }, (_, index) => (
                   <div className="h-36 bg-indigo-100" key={index} />
                 ))}

@@ -1,3 +1,4 @@
+import { Show, UserButton } from "@clerk/nextjs";
 import Link from "next/link";
 import { Brand } from "@/components/brand";
 import {
@@ -18,7 +19,7 @@ const topics = [
   "Extreme Weather and Disasters",
 ];
 
-export function SiteHeader() {
+export function SiteHeader({ showTopics = true }: { showTopics?: boolean }) {
   return (
     <header>
       <div className="bg-[#1c1d1f] text-zinc-300">
@@ -47,7 +48,7 @@ export function SiteHeader() {
       </div>
 
       <div className="border-b border-border bg-surface">
-        <div className="mx-auto flex h-[72px] w-[min(calc(100%-32px),1160px)] items-center gap-7">
+        <div className="mx-auto flex h-18 w-[min(calc(100%-32px),1160px)] items-center gap-7">
           <button
             className="grid size-10 place-items-center rounded-full transition hover:bg-surface-muted"
             type="button"
@@ -74,39 +75,63 @@ export function SiteHeader() {
             <a className="text-xs font-medium" href="#top-news">Blindspot</a>
           </nav>
           <div className="ml-auto flex items-center gap-2.5">
-            <button className="hidden min-h-11 rounded-md bg-foreground px-8 text-xs font-semibold text-white transition hover:bg-zinc-800 sm:block">
+            <button className="hidden min-h-11 rounded-md bg-foreground px-8 text-xs font-semibold text-white transition hover:bg-zinc-800 lg:block">
               Subscribe
             </button>
-            <button className="min-h-11 rounded-md border border-zinc-500 bg-transparent px-6 text-xs font-semibold transition hover:bg-surface-muted sm:px-8">
-              Login
-            </button>
+            <Show when="signed-out">
+              <Link
+                className="inline-flex min-h-11 items-center rounded-md border border-zinc-500 bg-transparent px-4 text-xs font-semibold transition hover:bg-surface-muted sm:px-6"
+                href="/sign-in"
+              >
+                Login
+              </Link>
+              <Link
+                className="inline-flex min-h-11 items-center rounded-md bg-foreground px-4 text-xs font-semibold text-white transition hover:bg-zinc-800 sm:px-6"
+                href="/sign-up"
+              >
+                Sign up
+              </Link>
+            </Show>
+            <Show when="signed-in">
+              <div className="grid min-h-11 min-w-11 place-items-center">
+                <UserButton
+                  appearance={{
+                    elements: {
+                      avatarBox: "size-9",
+                    },
+                  }}
+                />
+              </div>
+            </Show>
           </div>
         </div>
       </div>
 
-      <nav
-        className="border-b border-border bg-surface"
-        aria-label="Trending topics"
-      >
-        <div className="mx-auto flex w-[min(100%,1280px)] gap-2 overflow-x-auto px-4 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <button
-            className="grid min-h-8 shrink-0 place-items-center rounded-full bg-surface-muted px-3 text-lg"
-            aria-label="Add topic"
-          >
-            +
-          </button>
-          {topics.map((topic) => (
-            <a
-              className="inline-flex min-h-8 shrink-0 items-center gap-3 rounded-full bg-surface-muted px-4 text-[10px] font-semibold transition hover:bg-zinc-200"
-              href="#top-news"
-              key={topic}
+      {showTopics ? (
+        <nav
+          className="border-b border-border bg-surface"
+          aria-label="Trending topics"
+        >
+          <div className="mx-auto flex w-[min(100%,1280px)] gap-2 overflow-x-auto px-4 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <button
+              className="grid min-h-8 shrink-0 place-items-center rounded-full bg-surface-muted px-3 text-lg"
+              aria-label="Add topic"
             >
-              {topic}
-              <span className="text-base leading-none">+</span>
-            </a>
-          ))}
-        </div>
-      </nav>
+              +
+            </button>
+            {topics.map((topic) => (
+              <a
+                className="inline-flex min-h-8 shrink-0 items-center gap-3 rounded-full bg-surface-muted px-4 text-[10px] font-semibold transition hover:bg-zinc-200"
+                href="#top-news"
+                key={topic}
+              >
+                {topic}
+                <span className="text-base leading-none">+</span>
+              </a>
+            ))}
+          </div>
+        </nav>
+      ) : null}
     </header>
   );
 }

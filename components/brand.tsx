@@ -7,7 +7,7 @@ export function Brand({ inverse = false }: { inverse?: boolean }) {
       href="/"
       aria-label="Biasly News home"
     >
-      <span className="relative after:absolute after:right-0.5 after:bottom-px after:size-[5px] after:rounded-full after:bg-right">
+      <span className="relative after:absolute after:right-0.5 after:bottom-px after:size-1.25 after:rounded-full after:bg-right">
         biasly
       </span>
       <span
