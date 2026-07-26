@@ -84,3 +84,12 @@ export async function updateOxylabsSchedule(
   return data;
 }
 
+export async function listStoredOxylabsScheduleIds(): Promise<string[]> {
+  const { data, error } = await getSupabaseServiceClient()
+    .from("oxylabs_schedules")
+    .select("schedule_id")
+    .eq("status", "active");
+
+  if (error) throw databaseError("list stored Oxylabs schedule IDs", error);
+  return data.map((row) => row.schedule_id);
+}

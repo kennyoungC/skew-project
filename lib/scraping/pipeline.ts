@@ -1,19 +1,12 @@
 import "server-only";
 
 import { scrapeHtmlWithOxylabs } from "@/lib/oxylabs/client";
-import { extractHomepageCandidates } from "@/lib/scraping/homepage-parser";
-import { parseArticleDetail } from "@/lib/scraping/article-parser";
-import { getSourceStrategy } from "@/lib/scraping/source-strategies";
 import {
-  MAX_DETAIL_ATTEMPTS_PER_SOURCE,
   type ScrapePipelineInput,
   type ScrapeSummary,
   type SourceScrapeSummary,
 } from "@/lib/scraping/types";
-import {
-  findExistingArticleUrls,
-  insertArticlesAppendOnly,
-} from "@/lib/supabase/queries/articles";
+import { processSourceHomepageHtml } from "@/lib/scraping/source-processor";
 import { createLog } from "@/lib/supabase/queries/logs";
 import { listActiveSources } from "@/lib/supabase/queries/sources";
 import type { Json, Source } from "@/lib/supabase/types";
@@ -105,19 +98,6 @@ function resolveSelectedSources(
   return selected;
 }
 
-function newSourceSummary(source: Source): SourceScrapeSummary {
-  return {
-    articlesInserted: 0,
-    candidatesFound: 0,
-    detailPagesScraped: 0,
-    duplicatesSkipped: 0,
-    failed: 0,
-    rejected: 0,
-    sourceId: source.id,
-    sourceName: source.name,
-  };
-}
-
 export async function runManualScrapePipeline(
   input: ScrapePipelineInput,
 ): Promise<ScrapeSummary> {
@@ -149,26 +129,9 @@ export async function runManualScrapePipeline(
   );
 
   for (const source of sources) {
-    const sourceSummary = newSourceSummary(source);
-    sourceSummaries.push(sourceSummary);
-    const strategy = getSourceStrategy(source.name);
-
     await logProgress("scrape_source_started", `${source.name}: started.`, {
       sourceId: source.id,
     });
-
-    if (!strategy) {
-      sourceFailures += 1;
-      sourceSummary.failed += 1;
-      articlesFailed += 1;
-      increment(rejectionReasons, "unsupported_source");
-      await logProgress(
-        "scrape_source_failed",
-        `${source.name}: no supported parser strategy.`,
-        { level: "error", sourceId: source.id },
-      );
-      continue;
-    }
 
     try {
       const homepageHtml = await scrapeHtmlWithOxylabs(source.listing_url);
@@ -178,126 +141,31 @@ export async function runManualScrapePipeline(
         { sourceId: source.id },
       );
 
-      const extraction = extractHomepageCandidates(
+      const result = await processSourceHomepageHtml({
         homepageHtml,
-        source.listing_url,
-        strategy,
-      );
-      sourceSummary.candidatesFound = extraction.found;
-      sourceSummary.rejected += extraction.rejected;
-      candidatesFound += extraction.found;
-      candidatesRejected += extraction.rejected;
-      for (const [reason, count] of Object.entries(
-        extraction.rejectionReasons,
-      )) {
+        limitPerSource: input.limitPerSource,
+        onProgress: (event) =>
+          logProgress(event.event, event.message, {
+            context: event.context,
+            level: event.level,
+            sourceId: source.id,
+          }),
+        runSeenUrls,
+        source,
+      });
+      const sourceSummary = result.source;
+      sourceSummaries.push(sourceSummary);
+      candidatesFound += result.candidatesFound;
+      candidatesRejected += result.candidatesRejected;
+      duplicatesSkipped += result.duplicatesSkipped;
+      detailPagesScraped += result.detailPagesScraped;
+      articlesInserted += result.articlesInserted;
+      articlesRejected += result.articlesRejected;
+      articlesFailed += result.articlesFailed;
+      for (const [reason, count] of Object.entries(result.rejectionReasons)) {
         increment(rejectionReasons, reason, count);
       }
-
-      await logProgress(
-        "scrape_candidates_found",
-        `${source.name}: found ${extraction.candidates.length} article candidates; rejected ${extraction.rejected} links before detail scraping.`,
-        {
-          context: {
-            candidatesAccepted: extraction.candidates.length,
-            candidatesFound: extraction.found,
-            candidatesRejected: extraction.rejected,
-          },
-          sourceId: source.id,
-        },
-      );
-
-      const existing = await findExistingArticleUrls(extraction.candidates);
-      const candidates = extraction.candidates.filter((candidate) => {
-        if (
-          existing.originalUrls.has(candidate) ||
-          existing.canonicalUrls.has(candidate) ||
-          runSeenUrls.has(candidate)
-        ) {
-          sourceSummary.duplicatesSkipped += 1;
-          duplicatesSkipped += 1;
-          return false;
-        }
-        runSeenUrls.add(candidate);
-        return true;
-      });
-
-      if (sourceSummary.duplicatesSkipped > 0) {
-        await logProgress(
-          "scrape_duplicates_skipped",
-          `${source.name}: skipped ${sourceSummary.duplicatesSkipped} duplicate candidates.`,
-          { sourceId: source.id },
-        );
-      }
-
-      let attempts = 0;
-      for (const candidate of candidates) {
-        if (
-          sourceSummary.articlesInserted >= input.limitPerSource ||
-          attempts >= MAX_DETAIL_ATTEMPTS_PER_SOURCE
-        ) {
-          break;
-        }
-        attempts += 1;
-
-        try {
-          const articleHtml = await scrapeHtmlWithOxylabs(candidate);
-          detailPagesScraped += 1;
-          sourceSummary.detailPagesScraped += 1;
-
-          const parsed = parseArticleDetail(
-            articleHtml,
-            candidate,
-            source,
-            strategy,
-          );
-          if (!parsed.ok) {
-            articlesRejected += 1;
-            sourceSummary.rejected += 1;
-            increment(rejectionReasons, parsed.reason);
-            continue;
-          }
-
-          const canonical = parsed.article.canonical_url;
-          if (canonical) {
-            const canonicalExisting = await findExistingArticleUrls([
-              candidate,
-              canonical,
-            ]);
-            if (
-              canonicalExisting.originalUrls.size > 0 ||
-              canonicalExisting.canonicalUrls.size > 0 ||
-              (canonical !== candidate && runSeenUrls.has(canonical))
-            ) {
-              sourceSummary.duplicatesSkipped += 1;
-              duplicatesSkipped += 1;
-              continue;
-            }
-            runSeenUrls.add(canonical);
-          }
-
-          const inserted = await insertArticlesAppendOnly(parsed.article);
-          if (inserted.length === 0) {
-            sourceSummary.duplicatesSkipped += 1;
-            duplicatesSkipped += 1;
-            continue;
-          }
-
-          sourceSummary.articlesInserted += inserted.length;
-          articlesInserted += inserted.length;
-          await logProgress(
-            "scrape_article_inserted",
-            `${source.name}: inserted article ${sourceSummary.articlesInserted}/${input.limitPerSource}.`,
-            {
-              context: { articleId: inserted[0]?.id },
-              sourceId: source.id,
-            },
-          );
-        } catch {
-          articlesFailed += 1;
-          sourceSummary.failed += 1;
-          increment(rejectionReasons, "detail_processing_failed");
-        }
-      }
+      if (result.rejectionReasons.unsupported_source) sourceFailures += 1;
 
       await logProgress(
         "scrape_source_completed",
@@ -315,9 +183,18 @@ export async function runManualScrapePipeline(
       );
     } catch {
       sourceFailures += 1;
-      sourceSummary.failed += 1;
       articlesFailed += 1;
       increment(rejectionReasons, "source_processing_failed");
+      sourceSummaries.push({
+        articlesInserted: 0,
+        candidatesFound: 0,
+        detailPagesScraped: 0,
+        duplicatesSkipped: 0,
+        failed: 1,
+        rejected: 0,
+        sourceId: source.id,
+        sourceName: source.name,
+      });
       await logProgress(
         "scrape_source_failed",
         `${source.name}: source processing failed.`,
@@ -369,4 +246,3 @@ export async function runManualScrapePipeline(
 
   return summary;
 }
-

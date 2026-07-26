@@ -1,6 +1,11 @@
 "use client";
 
-import posthog from "posthog-js";
+import { useEffect } from "react";
+
+import {
+  isPostHogConfigured,
+  posthog,
+} from "@/lib/posthog-client";
 
 export default function GlobalError({
   error,
@@ -9,10 +14,12 @@ export default function GlobalError({
   error: Error;
   reset: () => void;
 }) {
-  posthog.captureException(error);
+  useEffect(() => {
+    if (isPostHogConfigured) posthog.captureException(error);
+  }, [error]);
 
   const handleReset = () => {
-    posthog.capture("page_error_reset");
+    if (isPostHogConfigured) posthog.capture("page_error_reset");
     reset();
   };
 

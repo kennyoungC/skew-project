@@ -81,6 +81,21 @@ export async function createOxylabsScheduleRun(
   return data;
 }
 
+export async function getOxylabsScheduleRunByJobId(
+  scheduleId: string,
+  jobId: string,
+): Promise<OxylabsScheduleRun | null> {
+  const { data, error } = await getSupabaseServiceClient()
+    .from("oxylabs_schedule_runs")
+    .select(RUN_SELECT)
+    .eq("oxylabs_schedule_id", scheduleId)
+    .eq("external_job_id", jobId)
+    .maybeSingle();
+
+  if (error) throw databaseError("get Oxylabs run by job ID", error);
+  return data;
+}
+
 export async function updateOxylabsScheduleRun(
   id: string,
   input: OxylabsScheduleRunUpdate,
@@ -119,4 +134,3 @@ export async function listRecentOxylabsScheduleRuns(options: {
   if (error) throw databaseError("list Oxylabs schedule runs", error);
   return data;
 }
-

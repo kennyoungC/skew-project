@@ -197,7 +197,7 @@ function invalid(reason: ArticleRejectionReason): ParsedArticleResult {
 export function parseArticleDetail(
   html: string,
   originalUrl: string,
-  source: Source,
+  source: Pick<Source, "id">,
   strategy: SourceStrategy,
 ): ParsedArticleResult {
   const $ = load(html);
