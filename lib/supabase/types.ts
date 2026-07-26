@@ -6,6 +6,8 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[];
 
+export type Vector = string | number[];
+
 export type Database = {
   public: {
     Tables: {
@@ -18,6 +20,7 @@ export type Database = {
           confidence: number;
           created_at: string;
           disclaimer: string;
+          embedding: Vector | null;
           framing_notes: string;
           id: string;
           left_percentage: number;
@@ -37,6 +40,7 @@ export type Database = {
           confidence: number;
           created_at?: string;
           disclaimer: string;
+          embedding?: Vector | null;
           framing_notes: string;
           id?: string;
           left_percentage: number;
@@ -56,6 +60,7 @@ export type Database = {
           confidence?: number;
           created_at?: string;
           disclaimer?: string;
+          embedding?: Vector | null;
           framing_notes?: string;
           id?: string;
           left_percentage?: number;
@@ -330,7 +335,29 @@ export type Database = {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      match_related_articles: {
+        Args: {
+          match_count?: number;
+          query_article_id: string;
+          query_embedding: string;
+        };
+        Returns: {
+          bias_label: "left" | "center" | "right" | "mixed" | "unclear";
+          center_percentage: number;
+          confidence: number;
+          id: string;
+          image_url: string;
+          left_percentage: number;
+          published_at: string;
+          right_percentage: number;
+          sentiment_label: "positive" | "neutral" | "negative";
+          similarity: number;
+          source_name: string;
+          title: string;
+        }[];
+      };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };
@@ -361,4 +388,3 @@ export type OxylabsScheduleRunInsert =
   TableInsert<"oxylabs_schedule_runs">;
 export type OxylabsScheduleRunUpdate =
   TableUpdate<"oxylabs_schedule_runs">;
-

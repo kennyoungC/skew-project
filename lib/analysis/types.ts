@@ -13,10 +13,11 @@ export type AnalysisSummary = {
   batchesProcessed: number;
   pendingFound: number;
   analyzed: number;
+  embeddingsGenerated: number;
+  embeddingsBackfilled: number;
   skipped: number;
   failed: number;
   remaining: number;
   durationMs: number;
   failures: AnalysisFailure[];
 };
-

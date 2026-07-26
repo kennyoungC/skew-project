@@ -6,6 +6,7 @@ import {
   ArticleAnalysisGenerationError,
   analyzeArticleWithAI,
 } from "@/lib/ai/article-analyzer";
+import { generateArticleEmbedding } from "@/lib/ai/article-embedder";
 import type {
   AnalysisFailure,
   AnalysisPipelineInput,
@@ -16,7 +17,10 @@ import {
   listPendingAnalysisArticles,
   markArticleAnalyzed,
 } from "@/lib/supabase/queries/articles";
-import { saveArticleAnalysis } from "@/lib/supabase/queries/analyses";
+import {
+  saveAnalysisEmbedding,
+  saveArticleAnalysis,
+} from "@/lib/supabase/queries/analyses";
 import { createLog } from "@/lib/supabase/queries/logs";
 
 const DEFAULT_BATCH_SIZE = 5;
@@ -58,6 +62,8 @@ export async function runArticleAnalysisPipeline(
   const failures: AnalysisFailure[] = [];
   const totalLimit = input.limit ?? Number.POSITIVE_INFINITY;
   let analyzed = 0;
+  let embeddingsGenerated = 0;
+  let embeddingsBackfilled = 0;
   let skipped = 0;
   let failed = 0;
   let batchesProcessed = 0;
@@ -69,8 +75,8 @@ export async function runArticleAnalysisPipeline(
     selectedArticleCount: input.articleIds?.length ?? null,
   });
 
-  while (analyzed + skipped + failed < totalLimit) {
-    const remainingCapacity = totalLimit - analyzed - skipped - failed;
+  while (attemptedIds.size < totalLimit) {
+    const remainingCapacity = totalLimit - attemptedIds.size;
     const articles = await listPendingAnalysisArticles({
       articleIds: input.articleIds,
       excludeIds: attemptedIds,
@@ -80,6 +86,8 @@ export async function runArticleAnalysisPipeline(
 
     batchesProcessed += 1;
     let batchAnalyzed = 0;
+    let batchEmbeddings = 0;
+    let batchBackfilled = 0;
     let batchSkipped = 0;
     let batchFailed = 0;
 
@@ -101,7 +109,21 @@ export async function runArticleAnalysisPipeline(
       }
 
       try {
-        const output = await analyzeArticleWithAI(article);
+        if (article.existingAnalysis) {
+          const embedding = await generateArticleEmbedding(article);
+          await saveAnalysisEmbedding(article.id, embedding);
+          await markArticleAnalyzed(article.id);
+          embeddingsGenerated += 1;
+          embeddingsBackfilled += 1;
+          batchEmbeddings += 1;
+          batchBackfilled += 1;
+          continue;
+        }
+
+        const [output, embedding] = await Promise.all([
+          analyzeArticleWithAI(article),
+          generateArticleEmbedding(article),
+        ]);
         const biasScore = Number(
           ((output.rightPercentage - output.leftPercentage) / 100).toFixed(4),
         );
@@ -113,6 +135,7 @@ export async function runArticleAnalysisPipeline(
           center_percentage: output.centerPercentage,
           confidence: output.confidence,
           disclaimer: ANALYSIS_DISCLAIMER,
+          embedding,
           framing_notes: output.framingNotes,
           left_percentage: output.leftPercentage,
           loaded_terms: output.loadedTerms,
@@ -124,7 +147,9 @@ export async function runArticleAnalysisPipeline(
         });
 
         analyzed += 1;
+        embeddingsGenerated += 1;
         batchAnalyzed += 1;
+        batchEmbeddings += 1;
 
         try {
           await markArticleAnalyzed(article.id);
@@ -164,6 +189,8 @@ export async function runArticleAnalysisPipeline(
     await logAnalysis("info", "analysis.batch_completed", "Analysis batch completed.", {
       analyzed: batchAnalyzed,
       batch: batchesProcessed,
+      embeddingsBackfilled: batchBackfilled,
+      embeddingsGenerated: batchEmbeddings,
       failed: batchFailed,
       skipped: batchSkipped,
     });
@@ -171,7 +198,7 @@ export async function runArticleAnalysisPipeline(
 
   const remaining = await countPendingAnalysisArticles(input.articleIds);
   const status =
-    analyzed === 0 && failed > 0
+    analyzed === 0 && embeddingsBackfilled === 0 && failed > 0
       ? "failed"
       : failed > 0 || skipped > 0 || remaining > 0
         ? "partial"
@@ -180,6 +207,8 @@ export async function runArticleAnalysisPipeline(
     analyzed,
     batchesProcessed,
     durationMs: Date.now() - startedAt,
+    embeddingsBackfilled,
+    embeddingsGenerated,
     failed,
     failures,
     pendingFound,
@@ -196,6 +225,8 @@ export async function runArticleAnalysisPipeline(
       analyzed,
       batchesProcessed,
       durationMs: summary.durationMs,
+      embeddingsBackfilled,
+      embeddingsGenerated,
       failed,
       pendingFound,
       remaining,

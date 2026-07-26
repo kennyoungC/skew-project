@@ -118,6 +118,14 @@ from Supabase through server-only queries. Unanalyzed articles stay hidden until
 their `article_analyses` row has been saved. The details route remains protected
 by Clerk.
 
+## pgvector and related articles
+
+Apply [`supabase/pgvector.sql`](supabase/pgvector.sql) to an existing Supabase
+project. The analysis pipeline uses OpenAI `text-embedding-3-small` to save a
+1,536-dimension embedding and backfill existing analysis rows without replacing
+their analysis. Embedded article details show up to five related stories ranked
+by cosine similarity.
+
 Then run the development server:
 
 ```bash

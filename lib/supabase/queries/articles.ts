@@ -6,6 +6,7 @@ import type {
   ArticleAnalysis,
   ArticleInsert,
   Source,
+  Vector,
 } from "@/lib/supabase/types";
 import {
   boundedLimit,
@@ -25,10 +26,35 @@ const ARTICLE_VIEW_SELECT = `
     loaded_terms,disclaimer,model,created_at,updated_at
   )
 `;
+const EMBEDDED_ARTICLE_VIEW_SELECT = ARTICLE_VIEW_SELECT.replace(
+  "loaded_terms,disclaimer,model,created_at,updated_at",
+  "loaded_terms,disclaimer,model,embedding,created_at,updated_at",
+);
 
 export type AnalyzedArticle = Article & {
   source: Pick<Source, "id" | "name" | "listing_url" | "logo_url">;
-  analysis: ArticleAnalysis;
+  analysis: Omit<ArticleAnalysis, "embedding"> & {
+    embedding?: Vector | null;
+  };
+};
+
+export type AnalysisWorkItem = Article & {
+  existingAnalysis: Pick<ArticleAnalysis, "embedding" | "id"> | null;
+};
+
+export type RelatedArticle = {
+  biasLabel: ArticleAnalysis["bias_label"];
+  centerPercentage: number;
+  confidence: number;
+  id: string;
+  imageUrl: string;
+  leftPercentage: number;
+  publishedAt: string;
+  rightPercentage: number;
+  sentimentLabel: ArticleAnalysis["sentiment_label"];
+  similarity: number;
+  sourceName: string;
+  title: string;
 };
 
 export type ArticleUrlExistence = {
@@ -57,7 +83,7 @@ export async function getAnalyzedArticleById(
 ): Promise<AnalyzedArticle | null> {
   const { data, error } = await getSupabaseServiceClient()
     .from("articles")
-    .select(ARTICLE_VIEW_SELECT)
+    .select(EMBEDDED_ARTICLE_VIEW_SELECT)
     .eq("id", id)
     .maybeSingle();
 
@@ -141,10 +167,10 @@ export type PendingAnalysisOptions = {
 
 export async function listPendingAnalysisArticles(
   options: PendingAnalysisOptions = {},
-): Promise<Article[]> {
+): Promise<AnalysisWorkItem[]> {
   const limit = boundedLimit(options.limit, 5);
   const pageSize = 100;
-  const pending: Article[] = [];
+  const pending: AnalysisWorkItem[] = [];
   let offset = 0;
 
   while (pending.length < limit) {
@@ -154,7 +180,7 @@ export async function listPendingAnalysisArticles(
         `
           id,source_id,original_url,canonical_url,title,image_url,published_at,
           raw_text,scraped_at,analyzed_at,created_at,updated_at,
-          article_analyses(id)
+          article_analyses(id,embedding)
         `,
       )
       .order("created_at", { ascending: true });
@@ -172,8 +198,9 @@ export async function listPendingAnalysisArticles(
     if (error) throw databaseError("list pending-analysis articles", error);
 
     for (const row of data) {
+      const existingAnalysis = row.article_analyses;
       if (
-        row.article_analyses === null &&
+        (existingAnalysis === null || existingAnalysis.embedding === null) &&
         !options.excludeIds?.has(row.id)
       ) {
         pending.push({
@@ -189,6 +216,7 @@ export async function listPendingAnalysisArticles(
           source_id: row.source_id,
           title: row.title,
           updated_at: row.updated_at,
+          existingAnalysis,
         });
         if (pending.length === limit) break;
       }
@@ -213,7 +241,7 @@ export async function countPendingAnalysisArticles(
   while (true) {
     let query = getSupabaseServiceClient()
       .from("articles")
-      .select("id,article_analyses(id)")
+      .select("id,article_analyses(id,embedding)")
       .order("created_at", { ascending: true });
 
     if (articleIds) query = query.in("id", [...articleIds]);
@@ -224,10 +252,52 @@ export async function countPendingAnalysisArticles(
     );
     if (error) throw databaseError("count pending-analysis articles", error);
 
-    count += data.filter((row) => row.article_analyses === null).length;
+    count += data.filter(
+      (row) =>
+        row.article_analyses === null ||
+        row.article_analyses.embedding === null,
+    ).length;
     if (data.length < pageSize) break;
     offset += pageSize;
   }
 
   return count;
+}
+
+function vectorLiteral(embedding: Vector): string {
+  if (typeof embedding === "string") return embedding;
+  return `[${embedding.join(",")}]`;
+}
+
+export async function getRelatedArticles(
+  articleId: string,
+  embedding: Vector | null | undefined,
+  requestedLimit = 5,
+): Promise<RelatedArticle[]> {
+  if (!embedding) return [];
+  const limit = Math.min(Math.max(Math.trunc(requestedLimit), 1), 5);
+  const { data, error } = await getSupabaseServiceClient().rpc(
+    "match_related_articles",
+    {
+      match_count: limit,
+      query_article_id: articleId,
+      query_embedding: vectorLiteral(embedding),
+    },
+  );
+
+  if (error) throw databaseError("list related articles", error);
+  return data.map((row) => ({
+    biasLabel: row.bias_label,
+    centerPercentage: row.center_percentage,
+    confidence: row.confidence,
+    id: row.id,
+    imageUrl: row.image_url,
+    leftPercentage: row.left_percentage,
+    publishedAt: row.published_at,
+    rightPercentage: row.right_percentage,
+    sentimentLabel: row.sentiment_label,
+    similarity: row.similarity,
+    sourceName: row.source_name,
+    title: row.title,
+  }));
 }

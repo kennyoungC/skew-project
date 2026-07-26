@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { cache } from "react";
 
 import { BiasMeter, type Framing } from "@/components/bias-meter";
+import { CompactNewsCard } from "@/components/compact-news-card";
 import { ArrowRightIcon, InfoIcon } from "@/components/icons";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
@@ -14,10 +15,13 @@ import {
   formatConfidence,
   formatLabel,
   formatScore,
+  toRelatedArticleCardView,
 } from "@/lib/news/presentation";
 import {
   getAnalyzedArticleById,
+  getRelatedArticles,
   type AnalyzedArticle,
+  type RelatedArticle,
 } from "@/lib/supabase/queries/articles";
 
 const getArticle = cache(getAnalyzedArticleById);
@@ -42,6 +46,10 @@ export default async function NewsDetailsPage(
   const { id } = await props.params;
   const article = await getArticle(id);
   if (!article) notFound();
+  const relatedArticles = await getRelatedArticles(
+    article.id,
+    article.analysis.embedding,
+  );
 
   const framing: Framing = {
     center: article.analysis.center_percentage,
@@ -105,6 +113,8 @@ export default async function NewsDetailsPage(
               Read original at {article.source.name}
               <ArrowRightIcon className="size-4" />
             </a>
+
+            <RelatedArticles articles={relatedArticles} />
           </article>
 
           <aside className="space-y-5 lg:sticky lg:top-5">
@@ -116,6 +126,38 @@ export default async function NewsDetailsPage(
       </main>
       <SiteFooter />
     </>
+  );
+}
+
+function RelatedArticles({ articles }: { articles: RelatedArticle[] }) {
+  if (articles.length === 0) return null;
+
+  return (
+    <section className="mt-10 border-t border-border pt-8">
+      <div className="mb-5 flex items-end justify-between gap-4">
+        <div>
+          <p className="text-[10px] font-semibold tracking-wider text-secondary uppercase">
+            Semantic similarity
+          </p>
+          <h2 className="mt-1 text-xl font-semibold tracking-[-0.03em]">
+            Related Articles
+          </h2>
+        </div>
+        <p className="max-w-64 text-right text-[9px] leading-relaxed text-secondary">
+          Ranked by similarity to this article&apos;s embedding.
+        </p>
+      </div>
+      <div className="grid gap-5 sm:grid-cols-2">
+        {articles.map((related) => (
+          <div className="relative" key={related.id}>
+            <span className="absolute top-3 left-3 z-10 rounded-full bg-black/70 px-2.5 py-1 text-[9px] font-semibold text-white backdrop-blur-sm">
+              {Math.round(related.similarity * 100)}% similar
+            </span>
+            <CompactNewsCard article={toRelatedArticleCardView(related)} />
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 

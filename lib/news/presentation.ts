@@ -1,5 +1,8 @@
 import type { Framing } from "@/components/bias-meter";
-import type { AnalyzedArticle } from "@/lib/supabase/queries/articles";
+import type {
+  AnalyzedArticle,
+  RelatedArticle,
+} from "@/lib/supabase/queries/articles";
 
 export type ArticleCardView = {
   confidence: number;
@@ -74,6 +77,26 @@ export function toArticleCardView(article: AnalyzedArticle): ArticleCardView {
     published: formatArticleDate(article.published_at),
     sentimentLabel: formatLabel(article.analysis.sentiment_label),
     source: article.source.name,
+    title: article.title,
+  };
+}
+
+export function toRelatedArticleCardView(
+  article: RelatedArticle,
+): ArticleCardView {
+  return {
+    confidence: article.confidence,
+    framing: {
+      center: article.centerPercentage,
+      left: article.leftPercentage,
+      right: article.rightPercentage,
+    },
+    framingLabel: formatLabel(article.biasLabel),
+    id: article.id,
+    image: article.imageUrl,
+    published: formatArticleDate(article.publishedAt),
+    sentimentLabel: formatLabel(article.sentimentLabel),
+    source: article.sourceName,
     title: article.title,
   };
 }
