@@ -1,40 +1,54 @@
 import type { Metadata } from "next";
 import Image from "next/image";
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { BiasMeter } from "@/components/bias-meter";
-import {
-  ArrowRightIcon,
-  BookmarkIcon,
-  InfoIcon,
-} from "@/components/icons";
+import { cache } from "react";
+
+import { BiasMeter, type Framing } from "@/components/bias-meter";
+import { ArrowRightIcon, InfoIcon } from "@/components/icons";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import {
-  getDemoArticleDetail,
-  type DemoArticleDetail,
-  type SourceItem,
-} from "@/lib/demo-article-detail";
+  articleParagraphs,
+  estimateReadTime,
+  formatArticleDate,
+  formatConfidence,
+  formatLabel,
+  formatScore,
+} from "@/lib/news/presentation";
+import {
+  getAnalyzedArticleById,
+  type AnalyzedArticle,
+} from "@/lib/supabase/queries/articles";
 
-type DetailPageProps = {
-  params: Promise<{ id: string }>;
-};
+const getArticle = cache(getAnalyzedArticleById);
+const panelClass = "rounded-lg border border-border bg-surface p-5";
 
-export async function generateMetadata({
-  params,
-}: DetailPageProps): Promise<Metadata> {
-  const article = getDemoArticleDetail((await params).id);
+export async function generateMetadata(
+  props: PageProps<"/news/[id]">,
+): Promise<Metadata> {
+  const { id } = await props.params;
+  const article = await getArticle(id);
   return article
     ? {
+        description: article.analysis.summary,
         title: `${article.title} — Biasly News`,
-        description: article.paragraphs[0],
       }
     : { title: "Story not found — Biasly News" };
 }
 
-export default async function NewsDetailsPage({ params }: DetailPageProps) {
-  const article = getDemoArticleDetail((await params).id);
+export default async function NewsDetailsPage(
+  props: PageProps<"/news/[id]">,
+) {
+  const { id } = await props.params;
+  const article = await getArticle(id);
   if (!article) notFound();
+
+  const framing: Framing = {
+    center: article.analysis.center_percentage,
+    left: article.analysis.left_percentage,
+    right: article.analysis.right_percentage,
+  };
+  const paragraphs = articleParagraphs(article.raw_text);
 
   return (
     <>
@@ -44,220 +58,210 @@ export default async function NewsDetailsPage({ params }: DetailPageProps) {
           <article>
             <ArticleHeader article={article} />
             <figure className="mt-6">
-              <div className="relative aspect-[16/8.5] overflow-hidden rounded-lg bg-center">
+              <div className="relative aspect-[16/8.5] overflow-hidden rounded-lg bg-zinc-200">
                 <Image
-                  src={article.image}
-                  alt="Donald Trump seated in the White House Cabinet Room"
+                  alt={article.title}
+                  className="object-cover"
                   fill
                   priority
-                  className="object-cover"
                   sizes="(max-width: 1024px) 100vw, 800px"
+                  src={article.image_url}
                 />
               </div>
-              <figcaption className="mt-3 text-[9px] leading-relaxed text-secondary">
-                {article.caption}
-                <br />
-                Photo: {article.credit}
+              <figcaption className="mt-3 text-[10px] leading-relaxed text-secondary">
+                Image published with the original article by {article.source.name}.
               </figcaption>
             </figure>
 
             <section className="mt-6 rounded-lg border border-border bg-surface p-4">
               <div className="mb-4 flex items-center gap-2 text-xs font-semibold">
-                Bias Distribution
+                AI-estimated framing
                 <InfoIcon className="size-4" />
               </div>
-              <BiasMeter framing={article.framing} compact />
-              <p className="mt-3 text-[10px] font-semibold">
-                {article.sourceCount} sources
-              </p>
+              <BiasMeter framing={framing} compact />
+              <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 border-t border-divider pt-4 text-[10px]">
+                <span>
+                  Label: <strong>{formatLabel(article.analysis.bias_label)}</strong>
+                </span>
+                <span>
+                  Confidence:{" "}
+                  <strong>{formatConfidence(article.analysis.confidence)}</strong>
+                </span>
+              </div>
             </section>
 
             <div className="mt-8 space-y-5 text-[15px] leading-[1.72] text-zinc-900">
-              {article.paragraphs.map((paragraph) => (
-                <p key={paragraph}>{paragraph}</p>
+              {paragraphs.map((paragraph, index) => (
+                <p key={`${index}-${paragraph.slice(0, 32)}`}>{paragraph}</p>
               ))}
             </div>
 
-            <RelatedStories stories={article.related} />
+            <a
+              className="mt-8 inline-flex min-h-11 items-center gap-2 rounded-md border border-foreground px-5 text-xs font-semibold transition hover:bg-foreground hover:text-white"
+              href={article.canonical_url ?? article.original_url}
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              Read original at {article.source.name}
+              <ArrowRightIcon className="size-4" />
+            </a>
           </article>
 
           <aside className="space-y-5 lg:sticky lg:top-5">
-            <AnalysisPanel article={article} />
+            <AnalysisPanel article={article} framing={framing} />
             <SummaryPanel article={article} />
-            <SourcesPanel article={article} />
+            <ArticleInfoPanel article={article} />
           </aside>
         </div>
-
-        <NewsletterBand />
       </main>
       <SiteFooter />
     </>
   );
 }
 
-function ArticleHeader({ article }: { article: DemoArticleDetail }) {
+function ArticleHeader({ article }: { article: AnalyzedArticle }) {
   return (
     <header>
-      <p className="text-xs font-medium">
-        {article.category} <span className="text-secondary">·</span>{" "}
-        {article.region}
-      </p>
+      <p className="text-xs font-medium text-secondary">{article.source.name}</p>
       <h1 className="mt-3 max-w-200 text-[clamp(30px,4vw,42px)] leading-[1.16] font-semibold tracking-[-0.045em]">
         {article.title}
       </h1>
-      <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-4 text-[10px]">
-        <strong>By {article.author}</strong>
+      <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-2 text-[10px]">
+        <time dateTime={article.published_at}>
+          {formatArticleDate(article.published_at)}
+        </time>
         <span className="h-3 w-px bg-border" />
-        <time>{article.date}</time>
-        <span className="h-3 w-px bg-border" />
-        <span>{article.readTime} read</span>
-        <div className="flex items-center gap-1 sm:ml-auto">
-          <ActionButton label="Save">
-            <BookmarkIcon />
-          </ActionButton>
-          <ActionButton label="Share">
-            <ArrowRightIcon className="-rotate-45" />
-          </ActionButton>
-          <button
-            className="grid size-10 place-items-center rounded-full text-lg transition hover:bg-surface-muted"
-            aria-label="More article actions"
-          >
-            ···
-          </button>
-        </div>
+        <span>{estimateReadTime(article.raw_text)} read</span>
       </div>
     </header>
   );
 }
 
-function ActionButton({
-  label,
-  children,
+function AnalysisPanel({
+  article,
+  framing,
 }: {
-  label: string;
-  children: React.ReactNode;
+  article: AnalyzedArticle;
+  framing: Framing;
 }) {
   return (
-    <button className="inline-flex min-h-10 items-center gap-2 rounded-md px-3 text-[10px] transition hover:bg-surface-muted">
-      {label}
-      <span className="[&_svg]:size-4">{children}</span>
-    </button>
-  );
-}
-
-const panelClass = "rounded-lg border border-border bg-surface p-5";
-
-function AnalysisPanel({ article }: { article: DemoArticleDetail }) {
-  return (
     <section className={panelClass}>
-      <PanelTitle>AI Framing Analysis</PanelTitle>
-      <p className="mt-6 text-[10px] font-medium">Overall framing</p>
-      <p className="mt-1 text-2xl font-semibold text-[#1d4ed8]">
-        Right {article.framing.right}%
-      </p>
-      <p className="mt-1 text-[10px] text-secondary">
-        Based on {article.sourceCount} balanced sources
-      </p>
+      <PanelTitle>AI Analysis</PanelTitle>
+      <dl className="mt-5 grid grid-cols-2 gap-4 text-[10px]">
+        <div>
+          <dt className="text-secondary">Political framing</dt>
+          <dd className="mt-1 text-xl font-semibold">
+            {formatLabel(article.analysis.bias_label)}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-secondary">Confidence</dt>
+          <dd className="mt-1 text-xl font-semibold">
+            {formatConfidence(article.analysis.confidence)}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-secondary">Sentiment</dt>
+          <dd className="mt-1 font-semibold">
+            {formatLabel(article.analysis.sentiment_label)}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-secondary">Sentiment score</dt>
+          <dd className="mt-1 font-semibold">
+            {formatScore(article.analysis.sentiment_score)}
+          </dd>
+        </div>
+      </dl>
       <div className="my-5 border-t border-divider" />
-      <FramingRows framing={article.framing} />
-      <p className="mt-6 border-t border-divider pt-5 text-[10px] leading-relaxed">
-        This AI estimate compares political framing across sources. Sources are
-        weighted by reliability and recency; results are not objective truth.
+      <FramingRows framing={framing} />
+      <div className="mt-5 border-t border-divider pt-5">
+        <p className="text-[10px] font-semibold">Framing notes</p>
+        <p className="mt-2 text-[10px] leading-relaxed text-zinc-700">
+          {article.analysis.framing_notes}
+        </p>
+      </div>
+      <p className="mt-5 border-t border-divider pt-5 text-[9px] leading-relaxed text-secondary">
+        {article.analysis.disclaimer}
       </p>
-      <button className="mt-4 min-h-10 w-full rounded-md border border-zinc-500 text-[10px] font-semibold transition hover:bg-surface-muted">
-        How We Analyze Framing
-      </button>
     </section>
   );
 }
 
-function FramingRows({ framing }: { framing: DemoArticleDetail["framing"] }) {
+function SummaryPanel({ article }: { article: AnalyzedArticle }) {
+  return (
+    <section className={panelClass}>
+      <PanelTitle>AI Summary</PanelTitle>
+      <p className="mt-4 text-[11px] leading-relaxed">
+        {article.analysis.summary}
+      </p>
+      <p className="mt-5 text-[9px] text-secondary">
+        AI summaries can contain mistakes.
+      </p>
+    </section>
+  );
+}
+
+function ArticleInfoPanel({ article }: { article: AnalyzedArticle }) {
+  return (
+    <section className={panelClass}>
+      <PanelTitle>Article information</PanelTitle>
+      <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-3 text-[10px]">
+        <dt className="text-secondary">Source</dt>
+        <dd className="text-right font-semibold">{article.source.name}</dd>
+        <dt className="text-secondary">Published</dt>
+        <dd className="text-right font-semibold">
+          {formatArticleDate(article.published_at)}
+        </dd>
+        <dt className="text-secondary">Model</dt>
+        <dd className="text-right font-semibold">{article.analysis.model}</dd>
+      </dl>
+      <div className="mt-5 border-t border-divider pt-5">
+        <p className="text-[10px] font-semibold">Loaded terms</p>
+        {article.analysis.loaded_terms.length > 0 ? (
+          <ul className="mt-3 flex flex-wrap gap-2">
+            {article.analysis.loaded_terms.map((term) => (
+              <li
+                className="rounded-full border border-border bg-surface-muted px-2.5 py-1 text-[9px]"
+                key={term}
+              >
+                {term}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-2 text-[10px] text-secondary">None identified.</p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function FramingRows({ framing }: { framing: Framing }) {
   return (
     <div className="space-y-4">
       {(
         [
           ["Left", framing.left, "bg-left"],
-          ["Center", framing.center, "bg-zinc-300 text-foreground"],
+          ["Center", framing.center, "bg-zinc-300"],
           ["Right", framing.right, "bg-right"],
         ] as const
       ).map(([label, value, color]) => (
-        <div className="grid grid-cols-[52px_38px_1fr] items-center gap-2 text-[10px]" key={label}>
+        <div
+          className="grid grid-cols-[52px_38px_1fr] items-center gap-2 text-[10px]"
+          key={label}
+        >
           <span>{label}</span>
-          <strong className={label === "Left" ? "text-left" : label === "Right" ? "text-right" : ""}>
-            {value}%
-          </strong>
+          <strong>{value}%</strong>
           <div className="h-2 overflow-hidden rounded-full bg-zinc-100">
-            <div className={`h-full rounded-full ${color}`} style={{ width: `${value}%` }} />
+            <div
+              className={`h-full rounded-full ${color}`}
+              style={{ width: `${value}%` }}
+            />
           </div>
         </div>
       ))}
     </div>
-  );
-}
-
-function SummaryPanel({ article }: { article: DemoArticleDetail }) {
-  return (
-    <section className={panelClass}>
-      <PanelTitle>AI Summary</PanelTitle>
-      <p className="mt-3 text-[9px] text-secondary">
-        Generated May 31, 2026 &nbsp;·&nbsp; 3 min read
-      </p>
-      <ul className="mt-5 list-disc space-y-4 pl-4 text-[11px] leading-relaxed">
-        {article.summary.map((point) => (
-          <li key={point}>{point}</li>
-        ))}
-      </ul>
-      <p className="mt-6 text-[9px] text-secondary">
-        AI summaries can make mistakes.
-      </p>
-      <button className="mt-3 min-h-9 rounded-md border border-zinc-500 px-5 text-[10px] font-semibold hover:bg-surface-muted">
-        Provide Feedback
-      </button>
-    </section>
-  );
-}
-
-function SourcesPanel({ article }: { article: DemoArticleDetail }) {
-  const counts = { Left: 2, Center: 4, Right: 6 };
-  return (
-    <section className={panelClass}>
-      <PanelTitle>Source Breakdown</PanelTitle>
-      <p className="mt-4 text-[10px] font-semibold">
-        {article.sourceCount} Total Sources
-      </p>
-      <div className="mt-5">
-        <FramingRows framing={article.framing} />
-      </div>
-      <div className="mt-6 grid grid-cols-[1fr_auto] gap-y-3 text-[9px]">
-        <strong>Top Sources</strong>
-        <strong>Framing</strong>
-        {article.sources.map((source) => (
-          <SourceRow source={source} key={source.name} />
-        ))}
-      </div>
-      <p className="sr-only">
-        Source counts: {counts.Left} left, {counts.Center} center,{" "}
-        {counts.Right} right.
-      </p>
-      <button className="mt-5 min-h-10 w-full rounded-md border border-zinc-500 text-[10px] font-semibold hover:bg-surface-muted">
-        View All Sources
-      </button>
-    </section>
-  );
-}
-
-function SourceRow({ source }: { source: SourceItem }) {
-  const color =
-    source.label === "Left"
-      ? "text-[#b42318]"
-      : source.label === "Right"
-        ? "text-[#1d4ed8]"
-        : "text-secondary";
-  return (
-    <>
-      <span>{source.name}</span>
-      <span className={color}>{source.label}</span>
-    </>
   );
 }
 
@@ -267,75 +271,5 @@ function PanelTitle({ children }: { children: React.ReactNode }) {
       <h2 className="text-lg font-semibold tracking-[-0.025em]">{children}</h2>
       <InfoIcon className="size-4" />
     </div>
-  );
-}
-
-function RelatedStories({
-  stories,
-}: {
-  stories: DemoArticleDetail["related"];
-}) {
-  return (
-    <section className="mt-8 border-t border-border pt-6">
-      <h2 className="mb-5 text-sm font-semibold">Related Stories</h2>
-      <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
-        {stories.map((story) => (
-          <Link className="group flex gap-3" href={`/news/${story.id}`} key={story.id}>
-            <div className="relative h-20 w-24 shrink-0 overflow-hidden rounded-md bg-center">
-              <Image
-                src={story.image}
-                alt=""
-                fill
-                className="object-cover transition-transform group-hover:scale-105"
-                sizes="96px"
-              />
-            </div>
-            <div>
-              <p className="text-[8px] text-secondary">
-                {story.category} · {story.region}
-              </p>
-              <h3 className="mt-1 line-clamp-2 text-[11px] leading-snug font-semibold">
-                {story.title}
-              </h3>
-              <p className="mt-2 text-[8px] text-secondary">
-                {story.date} &nbsp;·&nbsp; {story.readTime} read
-              </p>
-            </div>
-          </Link>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function NewsletterBand() {
-  return (
-    <section className="mt-10 flex flex-col gap-5 rounded-lg border border-border bg-surface p-6 sm:flex-row sm:items-center sm:justify-between">
-      <div>
-        <h2 className="text-lg font-semibold tracking-[-0.025em]">
-          Stay Informed. Stay Balanced.
-        </h2>
-        <p className="mt-2 text-[10px] text-secondary">
-          Get the top stories and framing analysis delivered to your inbox.
-        </p>
-      </div>
-      <form className="flex w-full max-w-md flex-col gap-3 sm:flex-row" action="#">
-        <label className="sr-only" htmlFor="newsletter-email">
-          Email address
-        </label>
-        <input
-          className="min-h-11 min-w-0 flex-1 rounded-md border border-zinc-500 bg-transparent px-4 text-xs"
-          id="newsletter-email"
-          type="email"
-          placeholder="Enter your email"
-        />
-        <button
-          className="min-h-11 rounded-md bg-foreground px-8 text-xs font-semibold text-white hover:bg-zinc-800"
-          type="button"
-        >
-          Subscribe
-        </button>
-      </form>
-    </section>
   );
 }

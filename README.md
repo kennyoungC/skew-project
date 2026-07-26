@@ -76,6 +76,48 @@ running `npm run dev` for safe per-source progress logs. Scraped articles remain
 hidden from the current demo UI until AI analysis and live UI data wiring are
 implemented.
 
+## AI article analysis
+
+The analysis pipeline finds pending articles by checking for a missing
+`article_analyses` row, validates structured model output, stores the analysis,
+and only then updates `articles.analyzed_at`.
+
+Add the server-only OpenAI key to `.env.local`. Batch size is optional and
+defaults to 5:
+
+```bash
+OPENAI_API_KEY=your_openai_api_key
+ANALYSIS_BATCH_SIZE=5
+```
+
+Analyze one pending article:
+
+```bash
+curl -sS -X POST http://localhost:3001/api/analyze \
+  -H 'Content-Type: application/json' \
+  -H "x-biasly-admin-secret: $BIASLY_ADMIN_SECRET" \
+  --data '{"limit":1}'
+```
+
+Analyze all pending articles:
+
+```bash
+curl -sS -X POST http://localhost:3001/api/analyze \
+  -H 'Content-Type: application/json' \
+  -H "x-biasly-admin-secret: $BIASLY_ADMIN_SECRET" \
+  --data '{}'
+```
+
+Watch the terminal running `npm run dev` for batch progress. Political framing
+is stored and displayed as an AI-estimated assessment, not objective truth.
+
+## Database-backed news UI
+
+The home feed and `/news/[id]` details pages read analyzed articles directly
+from Supabase through server-only queries. Unanalyzed articles stay hidden until
+their `article_analyses` row has been saved. The details route remains protected
+by Clerk.
+
 Then run the development server:
 
 ```bash

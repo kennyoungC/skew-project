@@ -133,16 +133,22 @@ export async function markArticleAnalyzed(
   if (error) throw databaseError("mark article analyzed", error);
 }
 
+export type PendingAnalysisOptions = {
+  articleIds?: readonly string[];
+  excludeIds?: ReadonlySet<string>;
+  limit?: number;
+};
+
 export async function listPendingAnalysisArticles(
-  requestedLimit?: number,
+  options: PendingAnalysisOptions = {},
 ): Promise<Article[]> {
-  const limit = boundedLimit(requestedLimit, 5);
+  const limit = boundedLimit(options.limit, 5);
   const pageSize = 100;
   const pending: Article[] = [];
   let offset = 0;
 
   while (pending.length < limit) {
-    const { data, error } = await getSupabaseServiceClient()
+    let query = getSupabaseServiceClient()
       .from("articles")
       .select(
         `
@@ -151,13 +157,25 @@ export async function listPendingAnalysisArticles(
           article_analyses(id)
         `,
       )
-      .order("created_at", { ascending: true })
-      .range(offset, offset + pageSize - 1);
+      .order("created_at", { ascending: true });
+
+    if (options.articleIds) {
+      if (options.articleIds.length === 0) return [];
+      query = query.in("id", [...options.articleIds]);
+    }
+
+    const { data, error } = await query.range(
+      offset,
+      offset + pageSize - 1,
+    );
 
     if (error) throw databaseError("list pending-analysis articles", error);
 
     for (const row of data) {
-      if (row.article_analyses === null) {
+      if (
+        row.article_analyses === null &&
+        !options.excludeIds?.has(row.id)
+      ) {
         pending.push({
           analyzed_at: row.analyzed_at,
           canonical_url: row.canonical_url,
@@ -181,4 +199,35 @@ export async function listPendingAnalysisArticles(
   }
 
   return pending;
+}
+
+export async function countPendingAnalysisArticles(
+  articleIds?: readonly string[],
+): Promise<number> {
+  const pageSize = 100;
+  let offset = 0;
+  let count = 0;
+
+  if (articleIds?.length === 0) return 0;
+
+  while (true) {
+    let query = getSupabaseServiceClient()
+      .from("articles")
+      .select("id,article_analyses(id)")
+      .order("created_at", { ascending: true });
+
+    if (articleIds) query = query.in("id", [...articleIds]);
+
+    const { data, error } = await query.range(
+      offset,
+      offset + pageSize - 1,
+    );
+    if (error) throw databaseError("count pending-analysis articles", error);
+
+    count += data.filter((row) => row.article_analyses === null).length;
+    if (data.length < pageSize) break;
+    offset += pageSize;
+  }
+
+  return count;
 }
