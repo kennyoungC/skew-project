@@ -1,6 +1,7 @@
 import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
 import { Poppins } from "next/font/google";
+import { PostHogUserIdentity } from "@/components/posthog-user-identity";
 import "./globals.css";
 
 const poppins = Poppins({
@@ -24,7 +25,10 @@ export default function RootLayout({
   return (
     <ClerkProvider afterSignOutUrl="/">
       <html lang="en" className={poppins.variable}>
-        <body>{children}</body>
+        <body>
+          <PostHogUserIdentity />
+          {children}
+        </body>
       </html>
     </ClerkProvider>
   );

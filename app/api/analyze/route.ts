@@ -7,6 +7,7 @@ import {
   hasValidAdminSecret,
   requireAdminSecretConfiguration,
 } from "@/lib/auth/admin-secret";
+import { getPostHogClient } from "@/lib/posthog-server";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -78,6 +79,22 @@ export async function POST(request: Request) {
 
   try {
     const summary = await runArticleAnalysisPipeline(parsed.data);
+
+    const posthog = getPostHogClient();
+    posthog.capture({
+      distinctId: "system",
+      event: "analysis_run_completed",
+      properties: {
+        analyzed: summary.analyzed,
+        duration_ms: summary.durationMs,
+        failed: summary.failed,
+        pending_found: summary.pendingFound,
+        skipped: summary.skipped,
+        status: summary.status,
+      },
+    });
+    await posthog.flush();
+
     return NextResponse.json(summary, {
       status: summary.status === "failed" ? 502 : 200,
     });

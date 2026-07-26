@@ -1,6 +1,21 @@
 "use client";
 
-export default function GlobalError({ reset }: { reset: () => void }) {
+import posthog from "posthog-js";
+
+export default function GlobalError({
+  error,
+  reset,
+}: {
+  error: Error;
+  reset: () => void;
+}) {
+  posthog.captureException(error);
+
+  const handleReset = () => {
+    posthog.capture("page_error_reset");
+    reset();
+  };
+
   return (
     <main className="mx-auto grid min-h-[60vh] w-[min(calc(100%-32px),760px)] place-items-center py-16 text-center">
       <div>
@@ -15,7 +30,7 @@ export default function GlobalError({ reset }: { reset: () => void }) {
         </p>
         <button
           className="mt-6 min-h-11 rounded-md bg-foreground px-5 text-sm font-semibold text-white"
-          onClick={reset}
+          onClick={handleReset}
           type="button"
         >
           Try again

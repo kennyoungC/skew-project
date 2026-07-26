@@ -4,6 +4,7 @@ import {
   hasValidAdminSecret,
   requireAdminSecretConfiguration,
 } from "@/lib/auth/admin-secret";
+import { getPostHogClient } from "@/lib/posthog-server";
 import {
   runManualScrapePipeline,
   ScrapeSelectionError,
@@ -86,6 +87,20 @@ export async function POST(request: Request) {
 
   try {
     const summary = await runManualScrapePipeline(parsed.data);
+
+    const posthog = getPostHogClient();
+    posthog.capture({
+      distinctId: "system",
+      event: "scrape_run_completed",
+      properties: {
+        articles_inserted: summary.articlesInserted,
+        duration_ms: summary.durationMs,
+        sources_checked: summary.sourcesChecked,
+        status: summary.status,
+      },
+    });
+    await posthog.flush();
+
     return Response.json(summary, {
       status: summary.status === "failed" ? 502 : 200,
     });

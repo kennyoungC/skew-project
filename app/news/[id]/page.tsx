@@ -23,6 +23,7 @@ import {
   type AnalyzedArticle,
   type RelatedArticle,
 } from "@/lib/supabase/queries/articles";
+import { getPostHogClient } from "@/lib/posthog-server";
 
 const getArticle = cache(getAnalyzedArticleById);
 const panelClass = "rounded-lg border border-border bg-surface p-5";
@@ -46,6 +47,21 @@ export default async function NewsDetailsPage(
   const { id } = await props.params;
   const article = await getArticle(id);
   if (!article) notFound();
+
+  const posthog = getPostHogClient();
+  posthog.capture({
+    distinctId: "anonymous",
+    event: "article_viewed",
+    properties: {
+      article_id: article.id,
+      bias_label: article.analysis.bias_label,
+      sentiment_label: article.analysis.sentiment_label,
+      source_name: article.source.name,
+      title: article.title,
+    },
+  });
+  await posthog.flush();
+
   const relatedArticles = await getRelatedArticles(
     article.id,
     article.analysis.embedding,

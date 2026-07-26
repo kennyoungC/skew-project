@@ -1,0 +1,22 @@
+[
+  {
+    "event_name": "article_viewed",
+    "event_description": "Fires when a user loads a news article detail page, capturing the article's source, sentiment, and framing.",
+    "file": "app/news/[id]/page.tsx"
+  },
+  {
+    "event_name": "scrape_run_completed",
+    "event_description": "Fires after the scrape pipeline finishes, capturing status, articles inserted, and duration.",
+    "file": "app/api/scrape/route.ts"
+  },
+  {
+    "event_name": "analysis_run_completed",
+    "event_description": "Fires after the AI analysis pipeline finishes, capturing status, articles analyzed, and duration.",
+    "file": "app/api/analyze/route.ts"
+  },
+  {
+    "event_name": "page_error_reset",
+    "event_description": "Fires when a user clicks the Try Again button on the global error page.",
+    "file": "app/error.tsx"
+  }
+]
